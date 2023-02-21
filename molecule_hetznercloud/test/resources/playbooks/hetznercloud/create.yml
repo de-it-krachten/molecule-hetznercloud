@@ -8,7 +8,9 @@
     ssh_port: 22
     ssh_user: root
     ssh_path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/ssh_key"
+    ssh_key_default: molecule-default
   tasks:
+
     - name: Create SSH key
       openssh_keypair:
         path: "{{ ssh_path }}"
@@ -26,12 +28,28 @@
         api_token: "{{ lookup('env', 'HCLOUD_TOKEN') }}"
         state: present
 
+    - name: Get all ssh-keys present
+      hcloud_ssh_key_info:
+      register: __hcloud_ssh_key_info
+
+    - name: If present, append to the list of keys
+      set_fact:
+        ssh_keys: >-
+          [
+          {% if (__hcloud_ssh_key_info.hcloud_ssh_key_info | json_query(q) | length > 0) %}
+          "{{ ssh_key_name }}", "{{ ssh_key_default }}"
+          {% else %}
+          "{{ ssh_key_name }}"
+          {% endif %}
+          ]
+      vars:
+        q: "[?name=='{{ ssh_key_default }}']"
+
     - name: Create molecule instance(s)
       hcloud_server:
         name: "{{ item.name }}"
         server_type: "{{ item.server_type }}"
-        ssh_keys:
-          - "{{ ssh_key_name }}"
+        ssh_keys: "{{ ssh_keys }}"
         image: "{{ item.image }}"
         location: "{{ item.location | default(omit) }}"
         datacenter: "{{ item.datacenter | default(omit) }}"
